@@ -13,7 +13,7 @@
 #define BUFFERSIZE 256
 
 int sockfd;
-int port;
+int port = 4000;
 
 pthread_t writer;
 pthread_t reader;
@@ -28,7 +28,7 @@ pthread_mutex_t mutexLogout;
 int online;
 
 void processInput(int argc, char const *argv[]);
-void initSocket(int port);
+void initSocket();
 void login();
 void* writeMessage(void* args);
 void* readMessage(void* args);
@@ -36,7 +36,7 @@ void refresh();
 
 int main(int argc, char const *argv[])
 {
-	processInput(argc, argv);
+	initSocket();
 
 	pthread_mutex_init(&mutexRefresh,NULL);
 	pthread_mutex_init(&mutexLogout,NULL);
@@ -54,20 +54,7 @@ int main(int argc, char const *argv[])
 	return 0;
 }
 
-void processInput(int argc, char const *argv[])
-{
-	if(argc < 2)
-	{
-		fprintf(stderr,"usage: %s port\n", argv[0]);
-		exit(0);
-	}
-
-	port = 4000 + atoi(argv[1]);
-
-	initSocket(port);
-}
-
-void initSocket(int port)
+void initSocket()
 {
 	struct sockaddr_in server_address;
 	struct hostent *server;
@@ -175,6 +162,7 @@ void* readMessage(void* args)
 			close(sockfd);
 
 			online = FALSE;
+			system("clear");
 			fprintf(stderr,"You are now offline!\n");
 
 			exit(0);

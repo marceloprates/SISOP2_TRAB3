@@ -24,7 +24,6 @@ typedef struct
 {
 	int online;
 	int id;
-	int port;
 	int socket;
 	char* username;
 	pthread_t thread;
@@ -32,39 +31,38 @@ typedef struct
 } Client;
 
 Client* clients;
-int roomSize;
+int roomSize = 400;
+int numClients;
 
 pthread_attr_t pthread_custom_attr;
 
-void processInput(int argc, char const *argv[]);
+int sockfd;
+struct sockaddr_in server_address;
+
+pthread_t adminThread;
+pthread_t acceptLoopThread;
+
+int chatIsOn;
+
+void* readAdminCommands(void* args);
+void* acceptLoop(void* args);
 void* worker(void* args);
-void initSocket(int threadIndex);
+void initSocket();
+void acceptConnection(int clientId);
 void readUsername(int threadIndex);
 void readMessages(int threadIndex);
 void sendToAllClients(char* message);
 void getTime(char* buf);
 void toLower(char* destination, char* source);
+void killClient(int clientId);
 
 int main(int argc, char const *argv[])
 {
-	processInput(argc,argv);
-
-	return 0;
-}
-
-void processInput(int argc, char const *argv[])
-{
 	int i;
 
-	if(argc < 2)
-	{
-		fprintf(stderr,"usage: %s #clients\n", argv[0]);
-		exit(0);
-	}
+	initSocket();
 
-	roomSize = atoi(argv[1]);
-
-	// allocating memory for clients array
+	// allocating memory for clients' array
 	clients = (Client*)calloc(roomSize,sizeof(Client));
 
 	// initializing clients
@@ -72,20 +70,54 @@ void processInput(int argc, char const *argv[])
 	{
 		clients[i].online = FALSE;
 		clients[i].id = i;
-		clients[i].port = 4000 + i;
 		clients[i].username = (char*)calloc(USERNAMESIZE,sizeof(char));		
 	}
 
-	// creating all clients' threads
-	for(i = 0; i < roomSize; i++)
+	chatIsOn = TRUE;
+
+	pthread_create(&adminThread, &pthread_custom_attr, readAdminCommands, (void*)0);
+	pthread_create(&acceptLoopThread, &pthread_custom_attr, acceptLoop, (void*)0);
+
+	while(chatIsOn) {}
+
+	for(i = 0; i < numClients; i++)
 	{
-		pthread_create(&(clients[i].thread), &pthread_custom_attr, worker, &(clients[i].id));
+		killClient(i);
 	}
 
-	// waiting for all clients' threads
-	for(i = 0; i < roomSize; i++)
+	close(sockfd);
+	fprintf(stderr,"cheguei\n");
+
+	return 1;
+}
+
+void* readAdminCommands(void* args)
+{
+	char typingBuffer[100];
+
+	bzero(typingBuffer,100);
+
+	fgets(typingBuffer,100,stdin);
+
+	while(strcmp(typingBuffer,"close\n") != 0) 
 	{
-		pthread_join(clients[i].thread, NULL);
+		fgets(typingBuffer,100,stdin);
+	}
+
+	chatIsOn = FALSE;
+
+	return;
+}
+
+void* acceptLoop(void* args)
+{
+	numClients = 0;
+
+	while(chatIsOn)
+	{
+		numClients++;
+		acceptConnection(numClients-1);
+		pthread_create(&(clients[numClients-1].thread), &pthread_custom_attr, worker, &(clients[numClients-1].id));
 	}
 }
 
@@ -96,19 +128,13 @@ void* worker(void* args)
 
 	fprintf(stderr,"DEBUG: this is thread number %d\n",clientId);
 
-	initSocket(clientId);
-
 	readUsername(clientId);
 
 	readMessages(clientId);
 }
 
-void initSocket(int clientId)
+void initSocket()
 {
-	int sockfd, newsockfd;
-	socklen_t clientLength;
-	struct sockaddr_in server_address, client_address;
-
 	// opening socket
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -119,7 +145,7 @@ void initSocket(int clientId)
 	}
 
 	server_address.sin_family = AF_INET;
-	server_address.sin_port = htons(clients[clientId].port);
+	server_address.sin_port = htons(4000);
 	server_address.sin_addr.s_addr = INADDR_ANY;
 	bzero(&(server_address.sin_zero), 8);
 
@@ -131,6 +157,13 @@ void initSocket(int clientId)
 		fprintf(stderr, "ERROR on binding\n");
 		exit(0);
 	}
+}
+
+void acceptConnection(int clientId)
+{
+	int newsockfd;
+	socklen_t clientLength;
+	struct sockaddr_in client_address;
 
 	// listening
 	listen(sockfd, 5);
@@ -148,8 +181,6 @@ void initSocket(int clientId)
 
 	clients[clientId].socket = newsockfd;
 	clients[clientId].online = TRUE;
-
-	close(sockfd);
 }
 
 void readUsername(int clientId)
@@ -172,8 +203,6 @@ void readUsername(int clientId)
 	char timeString[80];
 
 	getTime(timeString);
-
-	fprintf(stderr,"%s	Client in port %d's username: %s\n", timeString, clients[clientId].id, clients[clientId].username);
 }
 
 void readMessages(int clientId)
@@ -181,7 +210,7 @@ void readMessages(int clientId)
 	int n;
 	char message[MESSAGESIZE];
 
-	while(1)
+	while(chatIsOn)
 	{
 		char timeString[80];
 		getTime(timeString);
@@ -201,23 +230,11 @@ void readMessages(int clientId)
 
 		if(strcmp(lowercaseMessage,"logout") == 0)
 		{
-			clients[clientId].online = FALSE;
-
 			char logoutMessage[MESSAGESIZE];
 			sprintf(logoutMessage,"%s	%s LOGGED OUT\n", timeString, clients[clientId].username);
 			sendToAllClients(logoutMessage);
 
-			n = write(clients[clientId].socket, "KILL", strlen("KILL"));
-
-			if(n < 0)
-			{
-				fprintf(stderr,"ERROR writing to socket");
-				exit(0);
-			}
-
-			close(clients[clientId].socket);
-
-			return;
+			killClient(clientId);
 		}
 		else
 		{
@@ -267,4 +284,19 @@ void toLower(char* destination, char* source)
 	{
 		destination[i] = tolower(source[i]);
 	}
+}
+
+void killClient(int clientId)
+{
+	clients[clientId].online = FALSE;
+
+	int n = write(clients[clientId].socket, "KILL", strlen("KILL"));
+
+	if(n < 0)
+	{
+		fprintf(stderr,"ERROR writing to socket");
+		exit(0);
+	}
+
+	close(clients[clientId].socket);
 }
