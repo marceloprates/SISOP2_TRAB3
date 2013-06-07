@@ -82,13 +82,13 @@ int main(int argc, char const *argv[])
 
 	for(i = 0; i < numClients; i++)
 	{
-		killClient(i);
+		if(clients[i].online)
+			killClient(i);
 	}
 
 	close(sockfd);
-	fprintf(stderr,"cheguei\n");
 
-	return 1;
+	return 0;
 }
 
 void* readAdminCommands(void* args)
@@ -232,9 +232,12 @@ void readMessages(int clientId)
 		{
 			char logoutMessage[MESSAGESIZE];
 			sprintf(logoutMessage,"%s	%s LOGGED OUT\n", timeString, clients[clientId].username);
+
+			clients[clientId].online = FALSE;
+			close(clients[clientId].socket);
 			sendToAllClients(logoutMessage);
 
-			killClient(clientId);
+			return;
 		}
 		else
 		{

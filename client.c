@@ -51,6 +51,9 @@ int main(int argc, char const *argv[])
 	pthread_join(writer, NULL);
 	pthread_join(reader, NULL);
 
+	system("clear");
+	fprintf(stderr,"You are now offline!\n");
+
 	return 0;
 }
 
@@ -132,10 +135,18 @@ void* writeMessage(void* args)
 			exit(0);
 		}
 
+		if(strcmp(typingBuffer,"logout") == 0)
+    	{
+    		close(sockfd);
+    		online = FALSE;
+
+    		return;
+    	}
+
 		bzero(typingBuffer, BUFFERSIZE);
 	}
 
-	exit(0);
+	return;
 }
 
 void* readMessage(void* args)
@@ -179,7 +190,7 @@ void* readMessage(void* args)
 		}
 	}
 
-	exit(0);
+	return;
 }
 
 void refresh()
