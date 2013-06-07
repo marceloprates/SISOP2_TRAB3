@@ -1,11 +1,11 @@
 
-all: main client
+all: server client
 
-main: main.c
-	gcc -pthread -o main main.c
+server: server.c
+	gcc -pthread -o server server.c
 
 client: client.c
 	gcc -pthread -o client client.c
 
 clean:
-	rm *.o main client
+	rm server client
