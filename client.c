@@ -11,9 +11,9 @@
 #define TRUE 1
 #define CHATLOGSIZE 1048576
 #define BUFFERSIZE 256
+#define PORTNUMBER 4000
 
 int sockfd;
-int port = 4000;
 
 pthread_t writer;
 pthread_t reader;
@@ -52,7 +52,7 @@ int main(int argc, char const *argv[])
 	pthread_join(reader, NULL);
 
 	system("clear");
-	fprintf(stderr,"You are now offline!\n");
+	fprintf(stderr,"You are now offline! Come back later!\n");
 
 	return 0;
 }
@@ -79,7 +79,7 @@ void initSocket()
 	}
 
 	server_address.sin_family = AF_INET;     
-	server_address.sin_port = htons(port);    
+	server_address.sin_port = htons(PORTNUMBER);    
 	server_address.sin_addr = *((struct in_addr *)server->h_addr);
 	bzero(&(server_address.sin_zero), 8);
 
@@ -174,17 +174,16 @@ void* readMessage(void* args)
 
 			online = FALSE;
 			system("clear");
-			fprintf(stderr,"You are now offline!\n");
+			fprintf(stderr,"Sorry: the chat was closed. You are now offline.\n");
+
+			pthread_mutex_unlock(&mutexLogout);
 
 			exit(0);
-
-			pthread_mutex_lock(&mutexLogout);
-
 		}
 		else
 		{
 			strcat(chatLog,buffer);
-			strcat(chatLog,typingBuffer);
+			//strcat(chatLog,typingBuffer);
 
 			refresh();
 		}
@@ -198,6 +197,10 @@ void refresh()
 	pthread_mutex_lock(&mutexRefresh);
 
 	system("clear");
+
+	//char s[BUFFERSIZE];
+	//rewind(stdin);
+	//fgets(s,BUFFERSIZE,stdin);
 		
     fprintf(stderr,"%s\nType your messages here: ",chatLog);
 

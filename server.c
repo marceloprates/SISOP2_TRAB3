@@ -5,6 +5,7 @@
 #include <sys/types.h> 
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netdb.h>
 #include <pthread.h>
 #include <semaphore.h>
 #include <time.h>
@@ -13,6 +14,8 @@
 #define TRUE 1
 #define MESSAGESIZE 256
 #define USERNAMESIZE 256
+#define PORTNUMBER 4000
+#define MAXCONNECTIONS 5
 
 typedef struct
 {
@@ -126,15 +129,20 @@ void* worker(void* args)
 	param* p = (param*)args;
 	int clientId = p->in;
 
-	fprintf(stderr,"DEBUG: this is thread number %d\n",clientId);
-
 	readUsername(clientId);
+
+	char loginMessage[MESSAGESIZE], timeString[MESSAGESIZE];
+	getTime(timeString);
+	sprintf(loginMessage,"\n%s	>> %s is online <<\n\n",timeString, clients[clientId].username);
+	sendToAllClients(loginMessage);
 
 	readMessages(clientId);
 }
 
 void initSocket()
 {
+	int yes = 1;
+	
 	// opening socket
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -144,8 +152,10 @@ void initSocket()
 		exit(0);
 	}
 
+	setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+
 	server_address.sin_family = AF_INET;
-	server_address.sin_port = htons(4000);
+	server_address.sin_port = htons(PORTNUMBER);
 	server_address.sin_addr.s_addr = INADDR_ANY;
 	bzero(&(server_address.sin_zero), 8);
 
@@ -156,7 +166,7 @@ void initSocket()
 	{
 		fprintf(stderr, "ERROR on binding\n");
 		exit(0);
-	}
+	}	
 }
 
 void acceptConnection(int clientId)
@@ -166,7 +176,7 @@ void acceptConnection(int clientId)
 	struct sockaddr_in client_address;
 
 	// listening
-	listen(sockfd, 5);
+	listen(sockfd, MAXCONNECTIONS);
 
 	clientLength = sizeof(struct sockaddr_in);
 
@@ -231,7 +241,7 @@ void readMessages(int clientId)
 		if(strcmp(lowercaseMessage,"logout") == 0)
 		{
 			char logoutMessage[MESSAGESIZE];
-			sprintf(logoutMessage,"%s	%s LOGGED OUT\n", timeString, clients[clientId].username);
+			sprintf(logoutMessage,"\n%s	>> %s is offline <<\n\n", timeString, clients[clientId].username);
 
 			clients[clientId].online = FALSE;
 			close(clients[clientId].socket);
