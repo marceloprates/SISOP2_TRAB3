@@ -44,8 +44,14 @@ struct sockaddr_in server_address;
 
 pthread_t adminThread;
 pthread_t acceptLoopThread;
+pthread_t playMp3Thread;
 
+int withSounds;
 int chatIsOn;
+
+int color = 31;
+//char blue[20] = "\e[1;34m";
+char normal[20] = "\e[0m";
 
 void* readAdminCommands(void* args);
 void* acceptLoop(void* args);
@@ -58,10 +64,25 @@ void sendToAllClients(char* message);
 void getTime(char* buf);
 void toLower(char* destination, char* source);
 void killClient(int clientId);
+void* playMp3(void* args);
+void installDependencies();
 
 int main(int argc, char const *argv[])
 {
 	int i;
+
+	if(argc == 2)
+	{
+		if(strcmp(argv[1],"sounds") == 0)
+		{
+			withSounds = TRUE;
+			//installDependencies();
+		}
+		else
+		{
+			withSounds = FALSE;
+		}
+	}
 
 	initSocket();
 
@@ -77,6 +98,10 @@ int main(int argc, char const *argv[])
 	}
 
 	chatIsOn = TRUE;
+
+	system("clear");
+	fprintf(stderr,"Welcome! Your chat is on!\n");
+	fprintf(stderr,"Type 'close' to end the chat\n\n");
 
 	pthread_create(&adminThread, &pthread_custom_attr, readAdminCommands, (void*)0);
 	pthread_create(&acceptLoopThread, &pthread_custom_attr, acceptLoop, (void*)0);
@@ -100,14 +125,37 @@ void* readAdminCommands(void* args)
 
 	bzero(typingBuffer,100);
 
+	fprintf(stderr,"> ");
+
 	fgets(typingBuffer,100,stdin);
 
-	while(strcmp(typingBuffer,"close\n") != 0) 
+	while(chatIsOn)
 	{
+		if(strcmp(typingBuffer,"close\n") == 0)
+		{
+			fprintf(stderr, "\nClosing chat...\n");
+			chatIsOn = FALSE;
+			fprintf(stderr, "Chat is offline. Come back later!\n");
+		}
+		else if(strcmp(typingBuffer,"pony\n") == 0)
+		{
+			if(withSounds)
+			{
+				pthread_create(&playMp3Thread, &pthread_custom_attr, playMp3, (void*)"sounds/pony.mp3");
+			}
+
+			fprintf(stderr, "\n");
+		}
+		else
+		{
+			fprintf(stderr,"Fuck you, this command is not recognized\n\n");
+		}
+
+		fprintf(stderr,"> ");
 		fgets(typingBuffer,100,stdin);
 	}
 
-	chatIsOn = FALSE;
+	fprintf(stderr, "Chat is offline. Come back later!\n");
 
 	return;
 }
@@ -135,6 +183,11 @@ void* worker(void* args)
 	getTime(timeString);
 	sprintf(loginMessage,"\n%s	>> %s is online <<\n\n",timeString, clients[clientId].username);
 	sendToAllClients(loginMessage);
+
+	if(withSounds)
+	{
+		pthread_create(&playMp3Thread, &pthread_custom_attr, playMp3, (void*)"sounds/greeting.mp3");
+	}
 
 	readMessages(clientId);
 }
@@ -208,7 +261,9 @@ void readUsername(int clientId)
 		exit(0);
 	}
 
-	sprintf(clients[clientId].username,"%s",buffer);
+	sprintf(clients[clientId].username,"%c[%d;%dm%s%c[%dm",27,1,color,buffer,27,0);
+
+	color = 31 + (color - 31 + 1)%6;
 
 	char timeString[80];
 
@@ -238,7 +293,7 @@ void readMessages(int clientId)
 		char* lowercaseMessage = (char*)calloc(strlen(message),sizeof(char));
 		toLower(lowercaseMessage,message);
 
-		if(strcmp(lowercaseMessage,"logout") == 0)
+		if(strcmp(lowercaseMessage,"/logout") == 0)
 		{
 			char logoutMessage[MESSAGESIZE];
 			sprintf(logoutMessage,"\n%s	>> %s is offline <<\n\n", timeString, clients[clientId].username);
@@ -249,12 +304,36 @@ void readMessages(int clientId)
 
 			return;
 		}
+		else if(strcmp(lowercaseMessage,"/buzz") == 0)
+		{
+			char buzzMessage[MESSAGESIZE];
+			sprintf(buzzMessage,"\n%s	>> %s sent a buzz <<\n\n", timeString, clients[clientId].username);
+
+			sendToAllClients(buzzMessage);
+
+			if(withSounds)
+			{
+				pthread_create(&playMp3Thread, &pthread_custom_attr, playMp3, (void*)"sounds/buzz.mp3");
+			}
+		}
+		else if(strcmp(lowercaseMessage, "/pony") == 0)
+		{
+			if(withSounds)
+			{
+				pthread_create(&playMp3Thread, &pthread_custom_attr, playMp3, (void*)"sounds/pony.mp3");
+			}
+		}
 		else
 		{
 			char saysMessage[MESSAGESIZE];
 
 			sprintf(saysMessage, "%s	%s says: %s\n", timeString, clients[clientId].username, message);
 			sendToAllClients(saysMessage);
+
+			if(withSounds)
+			{
+				pthread_create(&playMp3Thread, &pthread_custom_attr, playMp3, (void*)"sounds/message.mp3");
+			}
 		}
 	}
 }
@@ -312,4 +391,20 @@ void killClient(int clientId)
 	}
 
 	close(clients[clientId].socket);
+}
+
+void* playMp3(void* args)
+{
+	char* path = (char*)args;
+
+	char command[50];
+	sprintf(command,"mpg123 %s", path);
+
+	system(command);
+}
+
+void installDependencies()
+{
+
+	system("sudo apt-get install mpg123");
 }

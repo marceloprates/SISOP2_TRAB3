@@ -24,9 +24,11 @@ char typingBuffer[BUFFERSIZE];
 
 pthread_mutex_t mutexRefresh;
 pthread_mutex_t mutexLogout;
+pthread_mutex_t mutexReadMessage;
 
 int online;
 
+void* readMessage(void* args);
 void processInput(int argc, char const *argv[]);
 void initSocket();
 void login();
@@ -135,7 +137,7 @@ void* writeMessage(void* args)
 			exit(0);
 		}
 
-		if(strcmp(typingBuffer,"logout") == 0)
+		if(strcmp(typingBuffer,"/logout") == 0)
     	{
     		close(sockfd);
     		online = FALSE;
@@ -187,6 +189,7 @@ void* readMessage(void* args)
 
 			refresh();
 		}
+
 	}
 
 	return;
@@ -197,11 +200,9 @@ void refresh()
 	pthread_mutex_lock(&mutexRefresh);
 
 	system("clear");
-
-	//char s[BUFFERSIZE];
-	//rewind(stdin);
-	//fgets(s,BUFFERSIZE,stdin);
-		
+	
+	fprintf(stderr,"Welcome! You are now online!\n");
+	fprintf(stderr,"Type '/logout' to exit the chat\nType '/buzz' to send a buzz\n");
     fprintf(stderr,"%s\nType your messages here: ",chatLog);
 
     pthread_mutex_unlock(&mutexRefresh);
